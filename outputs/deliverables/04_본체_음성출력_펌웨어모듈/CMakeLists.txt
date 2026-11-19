@@ -1,0 +1,5 @@
+# Zephyr 모듈로 포함: 앱 CMakeLists.txt 에서 add_subdirectory(aac_audio)
+zephyr_library_named(aac_audio)
+zephyr_include_directories(include)
+zephyr_library_sources(src/aac_crc.c src/aac_adpcm.c src/aac_pkg.c src/aac_player.c src/aac_update.c)
+zephyr_library_sources_ifdef(CONFIG_AAC_AUDIO_ZEPHYR_HAL port/zephyr/aac_hal_zephyr.c)

@@ -1,0 +1,35 @@
+== 펌웨어 모듈 PC 시험 (tests/make run) ==
+[T1] 패키지 적재·인덱스
+  항목 31개, 세트 v1, 16000Hz, 코덱 1
+[T2] 손상 패키지 거부(무작위 1비트 200회)
+  거부 200/200
+[T3] 문구 재생 정확도(31종 × 20회, Python 참조 디코더와 비트 단위 비교)
+  일치 620/620
+[T4] 터치 → 첫 오디오 버퍼 공급 지연(호스트 CPU, 100회)
+  평균 0 us, 최대 1 us (모듈 처리 시간만; 실기 I2S·앰프 기동 시간은 미포함)
+[T5] 우선순위: 응급이 일반을 끊고, 일반은 응급을 못 끊음
+[T6] 도움 영역 길게 누르기 → SOS
+[T7] 업로드 프로토콜·A/B 슬롯·롤백
+  재부팅 모사: 활성 v2
+[T8] 통신 계층 없이 독립 동작: 본 시험 전체가 BLE·Wi-Fi·DX-M2 없이 실행됨
+
+결과: 28/28 통과
+
+== aacpkg 단위 시험 ==
+test_roundtrip_snr (test_aacpkg.TestAdpcm.test_roundtrip_snr) ... ok
+test_alignment (test_aacpkg.TestFormat.test_alignment) ... ok
+test_bad_zone (test_aacpkg.TestFormat.test_bad_zone) ... ok
+test_reject_corruption (test_aacpkg.TestFormat.test_reject_corruption) ... ok
+test_roundtrip (test_aacpkg.TestFormat.test_roundtrip) ... ok
+test_corrupt_upload_keeps_active (test_aacpkg.TestUpload.test_corrupt_upload_keeps_active) ... ok
+test_frame_crc (test_aacpkg.TestUpload.test_frame_crc) ... ok
+test_packet_loss_retry (test_aacpkg.TestUpload.test_packet_loss_retry) ... ok
+test_upload_and_rollback (test_aacpkg.TestUpload.test_upload_and_rollback) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 1.749s
+
+OK
+
+== 크로스 컴파일 크기 (Cortex-M4F, -Os) ==
+text 2987 / data 0 / bss 3548 bytes

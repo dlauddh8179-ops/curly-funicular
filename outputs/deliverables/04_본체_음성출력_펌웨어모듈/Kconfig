@@ -1,0 +1,7 @@
+config AAC_AUDIO_ZEPHYR_HAL
+	bool "AAC audio: use bundled Zephyr HAL port (I2S + SPI NOR + NVS)"
+	default y
+	select I2S
+	select FLASH
+	select FLASH_MAP
+	select NVS
