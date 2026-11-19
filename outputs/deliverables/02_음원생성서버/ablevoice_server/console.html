@@ -1,0 +1,53 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>에이블톡 음원 서버 콘솔</title>
+<style>
+body{font-family:'Malgun Gothic','Noto Sans KR',sans-serif;margin:0;background:#f6f6f3;color:#111}
+header{background:#1c5cab;color:#fff;padding:12px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+header h1{font-size:18px;margin:0;flex:1}input,select,button{font:inherit;padding:6px 8px;border-radius:6px;border:1px solid #bbb}
+button{background:#fff;cursor:pointer}button.p{background:#eb6834;color:#fff;border-color:#eb6834}
+main{padding:16px;display:grid;gap:16px}.card{background:#fff;border-radius:8px;padding:14px}
+h2{font-size:16px;margin:0 0 10px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.btn{border:2px solid #ddd;border-radius:10px;padding:10px}.btn h3{margin:0 0 6px;font-size:14px;display:flex;gap:6px;align-items:center}
+.dot{width:14px;height:14px;border-radius:50%}.btn select,.btn input{width:100%;box-sizing:border-box;margin:3px 0}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}table{border-collapse:collapse;width:100%;font-size:14px}
+td,th{border-bottom:1px solid #eee;padding:5px;text-align:left}.help{color:#c0392b;font-weight:bold}#msg{font-size:13px}
+</style></head><body>
+<header><h1>에이블톡 음원 서버 콘솔 <small>(점검·시험용 — 보호자 웹은 별도)</small></h1>
+<input id="dev" placeholder="기기 ID" size="8"><input id="tok" placeholder="관리자 토큰" size="28"><button onclick="load()">불러오기</button>
+<button class="p" onclick="publish()">기기로 보낼 패키지 만들기</button><span id="msg"></span></header>
+<main>
+<div class="card"><h2 id="h_gen">일반 세트</h2><div class="grid" id="set0"></div></div>
+<div class="card"><h2>작업장 세트</h2><div class="grid" id="set1"></div></div>
+<div class="card"><h2>작업장 시간</h2><div id="sched"></div><button onclick="addSched()">+ 시간 추가</button> <button onclick="saveSched()">저장</button></div>
+<div class="card"><h2>누름 기록</h2><button onclick="events()">새로고침</button><table><thead><tr><th>시각</th><th>세트</th><th>버튼</th><th>문장</th></tr></thead><tbody id="ev"></tbody></table></div>
+</main>
+<script>
+const COLORS=['#d9473a','#e8a400','#3a9a4a','#2f6fbf'],DAYS='월화수목금토일';let LIB=null,DEV=null;
+const $=id=>document.getElementById(id),msg=t=>$('msg').textContent=t;
+async function api(p,opt={}){opt.headers=Object.assign({'Authorization':'Bearer '+$('tok').value},opt.headers||{});
+ const r=await fetch(p,opt);if((r.headers.get('content-type')||'').includes('json')){const j=await r.json();if(!r.ok){msg('오류: '+j.error);throw j}return j}return r}
+const J=b=>({method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+async function load(){LIB=await (await fetch('/api/library')).json();DEV=await api('/api/devices/'+$('dev').value);render();events();msg(`설정 v${DEV.config_version}${DEV.pending_changes?' · 보내지 않은 변경 있음':''}`)}
+function render(){for(const s of [0,1]){$('set'+s).innerHTML=[1,2,3,4].map(b=>{const sl=DEV.slots.find(x=>x.set==s&&x.button==b);
+ const L=LIB.sets[s].buttons[b-1];const opts=L.sentences.map((x,i)=>`<option value="${x.id}" ${sl.mode=='library'&&sl.id==x.id?'selected':''}>${i+1}. ${x.text}</option>`).join('');
+ return `<div class="btn"><h3><span class="dot" style="background:${COLORS[b-1]}"></span>버튼 ${b} · ${L.category}</h3>
+ <select onchange="pick(${s},${b},this.value)"><option value="">— 목록에서 고르기 —</option>${opts}</select>
+ <input id="t${s}${b}" maxlength="15" placeholder="직접 입력(15자 이내)" value="${sl.mode=='text'?sl.text:''}"><button onclick="txt(${s},${b})">입력 적용</button>
+ <input type="file" accept="audio/wav" id="f${s}${b}"><button onclick="rec(${s},${b})">녹음 올리기</button>
+ <div class="row"><b>현재:</b> ${sl.text} <small>(${{library:'목록',text:'직접입력',recording:'녹음'}[sl.mode]})</small><button onclick="prev(${s},${b})">▶</button></div></div>`}).join('')}
+ $('sched').innerHTML=DEV.schedule.map((x,i)=>schedRow(x,i)).join('')}
+function schedRow(x,i){return `<div class="row" data-i="${i}">${[...DAYS].map((d,k)=>`<label><input type="checkbox" ${x.days.includes(k)?'checked':''}>${d}</label>`).join('')}
+ <input type="time" value="${x.start}"> ~ <input type="time" value="${x.end}"> <button onclick="this.parentNode.remove()">삭제</button></div>`}
+function addSched(){$('sched').insertAdjacentHTML('beforeend',schedRow({days:[0,1,2,3,4],start:'09:00',end:'16:00'},0))}
+async function saveSched(){const items=[...$('sched').children].map(r=>{const c=[...r.querySelectorAll('input[type=checkbox]')];const t=r.querySelectorAll('input[type=time]');
+ return{days:c.map((x,k)=>x.checked?k:-1).filter(k=>k>=0),start:t[0].value,end:t[1].value}});DEV=await api(`/api/devices/${$('dev').value}/schedule`,J({schedule:items}));render();msg('시간표 저장')}
+async function pick(s,b,id){if(!id)return;DEV=await api(`/api/devices/${$('dev').value}/slots/${s}/${b}`,J({mode:'library',id:+id}));render();msg('저장(아직 기기에 보내지 않음)')}
+async function txt(s,b){DEV=await api(`/api/devices/${$('dev').value}/slots/${s}/${b}`,J({mode:'text',text:$('t'+s+b).value}));render();msg('저장')}
+async function rec(s,b){const f=$('f'+s+b).files[0];if(!f)return msg('WAV 파일 선택');
+ const r=await api(`/api/devices/${$('dev').value}/recordings`,{method:'POST',headers:{'Content-Type':'audio/wav'},body:await f.arrayBuffer()});
+ DEV=await api(`/api/devices/${$('dev').value}/slots/${s}/${b}`,J({mode:'recording',recording_id:r.recording_id,label:f.name.replace(/\.wav$/i,'').slice(0,15)}));render();
+ msg(`녹음 처리: ${r.duration_ms}ms, 잡음비 ${r.noise_ratio_before_db}→${r.noise_ratio_after_db}dB`)}
+async function prev(s,b){const r=await api(`/api/devices/${$('dev').value}/preview/${s}/${b}`);new Audio(URL.createObjectURL(await r.blob())).play()}
+async function publish(){msg('음원 준비 중...');const r=await api(`/api/devices/${$('dev').value}/publish`,{method:'POST'});msg(`패키지 v${r.version} 생성(${r.size.toLocaleString()} bytes) — 앱·거치대가 내려받아 기기로 전달`);DEV=await api('/api/devices/'+$('dev').value)}
+async function events(){const r=await api(`/api/devices/${$('dev').value}/events`);$('ev').innerHTML=r.events.slice().reverse().map(e=>`<tr class="${e.help?'help':''}"><td>${new Date(e.unix_time*1000).toLocaleString('ko-KR')}</td><td>${e.set_name}</td><td>${e.button}</td><td>${e.text}</td></tr>`).join('')}
+</script></body></html>

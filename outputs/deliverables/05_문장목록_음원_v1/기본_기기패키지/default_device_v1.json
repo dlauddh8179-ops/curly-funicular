@@ -1,0 +1,85 @@
+{
+ "config_version": 1,
+ "prev_config_version": 0,
+ "device_id": 1001,
+ "sample_rate": 16000,
+ "buttons": [
+  {
+   "set": 0,
+   "button": 0,
+   "id": 1101,
+   "text": "물 주세요",
+   "source": "library",
+   "wav": "../음원_WAV_16kHz/1101.wav"
+  },
+  {
+   "set": 0,
+   "button": 1,
+   "id": 1201,
+   "text": "아파요",
+   "source": "library",
+   "wav": "../음원_WAV_16kHz/1201.wav"
+  },
+  {
+   "set": 0,
+   "button": 2,
+   "id": 1301,
+   "text": "네",
+   "source": "library",
+   "wav": "../음원_WAV_16kHz/1301.wav"
+  },
+  {
+   "set": 0,
+   "button": 3,
+   "id": 1401,
+   "text": "도와주세요",
+   "source": "library",
+   "wav": "../음원_WAV_16kHz/1401.wav"
+  },
+  {
+   "set": 1,
+   "button": 0,
+   "id": 2101,
+   "text": "어서 오세요",
+   "source": "library",
+   "wav": "../음원_WAV_16kHz/2101.wav"
+  },
+  {
+   "set": 1,
+   "button": 1,
+   "id": 2201,
+   "text": "다 했어요",
+   "source": "library",
+   "wav": "../음원_WAV_16kHz/2201.wav"
+  },
+  {
+   "set": 1,
+   "button": 2,
+   "id": 2301,
+   "text": "네",
+   "source": "library",
+   "wav": "../음원_WAV_16kHz/2301.wav"
+  },
+  {
+   "set": 1,
+   "button": 3,
+   "id": 2401,
+   "text": "도와주세요",
+   "source": "library",
+   "wav": "../음원_WAV_16kHz/2401.wav"
+  }
+ ],
+ "schedule": [
+  {
+   "days": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "start": "09:00",
+   "end": "16:00"
+  }
+ ]
+}

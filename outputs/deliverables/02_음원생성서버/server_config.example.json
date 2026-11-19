@@ -1,0 +1,6 @@
+{
+  "engine": "abletalk",
+  "abletalk": {"base_url": "", "api_key": "", "voice": "", "extra": {}},
+  "event_webhook": "",
+  "_설명": "engine: abletalk(운영) | espeak(개발·시험). abletalk 항목은 u2tech 엔진 정보 확정 후 입력. event_webhook: 누름 기록을 보호자 웹(알림 판단)으로 전달할 주소"
+}

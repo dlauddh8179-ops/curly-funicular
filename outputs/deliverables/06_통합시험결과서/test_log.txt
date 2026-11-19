@@ -1,35 +1,54 @@
-== 펌웨어 모듈 PC 시험 (tests/make run) ==
-[T1] 패키지 적재·인덱스
-  항목 31개, 세트 v1, 16000Hz, 코덱 1
+== 기기 펌웨어 PC 시험 (04/tests: make run) ==
+[T1] 패키지 적재: 세트 2 × 버튼 4, 작업장 시간표
+  음원 8개, 설정 v1, 기기 1001, 시간표 1개
 [T2] 손상 패키지 거부(무작위 1비트 200회)
   거부 200/200
-[T3] 문구 재생 정확도(31종 × 20회, Python 참조 디코더와 비트 단위 비교)
-  일치 620/620
-[T4] 터치 → 첫 오디오 버퍼 공급 지연(호스트 CPU, 100회)
-  평균 0 us, 최대 1 us (모듈 처리 시간만; 실기 I2S·앰프 기동 시간은 미포함)
-[T5] 우선순위: 응급이 일반을 끊고, 일반은 응급을 못 끊음
-[T6] 도움 영역 길게 누르기 → SOS
-[T7] 업로드 프로토콜·A/B 슬롯·롤백
-  재부팅 모사: 활성 v2
-[T8] 통신 계층 없이 독립 동작: 본 시험 전체가 BLE·Wi-Fi·DX-M2 없이 실행됨
+[T3] 재생 정확도(8개 음원 × 20회, Python 참조 디코더와 비트 비교)
+  일치 160/160
+[T4] 세트 자동 전환: 시간표(평일 작업장 시간)에 따라 버튼 문장 선택
+  월 10:00 작업장 / 토 10:00 일반 / 월 17:00 일반 — 정상
+[T5] 불빛 5초 + 진동
+[T6] 버튼 4(도움 요청) 우선: 다른 버튼을 끊고, 다른 버튼에 끊기지 않음
+[T7] 누름 기록: 저장·회수(EVENTS_GET/ACK)·버퍼 초과
+[T8] 시각 설정(TIME_SET)
+[T9] 패키지 전송·A/B 슬롯·롤백, 안내 음성 없음
+[T10] 처리 지연(버튼 → 첫 오디오 버퍼, 호스트 CPU 100회)
+  평균 0 us, 최대 1 us (모듈 처리만; 실기 I2S·앰프 기동 미포함)
+[T11] 통신 계층 없이 독립 동작: 전 시험을 BLE·Wi-Fi 없이 수행
 
-결과: 28/28 통과
+결과: 30/30 통과
 
-== aacpkg 단위 시험 ==
+== 패키지·전송·종단 시험 (03: python -m unittest) ==
 test_roundtrip_snr (test_aacpkg.TestAdpcm.test_roundtrip_snr) ... ok
-test_alignment (test_aacpkg.TestFormat.test_alignment) ... ok
-test_bad_zone (test_aacpkg.TestFormat.test_bad_zone) ... ok
 test_reject_corruption (test_aacpkg.TestFormat.test_reject_corruption) ... ok
 test_roundtrip (test_aacpkg.TestFormat.test_roundtrip) ... ok
-test_corrupt_upload_keeps_active (test_aacpkg.TestUpload.test_corrupt_upload_keeps_active) ... ok
-test_frame_crc (test_aacpkg.TestUpload.test_frame_crc) ... ok
-test_packet_loss_retry (test_aacpkg.TestUpload.test_packet_loss_retry) ... ok
-test_upload_and_rollback (test_aacpkg.TestUpload.test_upload_and_rollback) ... ok
+test_schedule_rule (test_aacpkg.TestFormat.test_schedule_rule) ... ok
+test_validation (test_aacpkg.TestFormat.test_validation) ... ok
+test_corrupt_upload_keeps_active (test_aacpkg.TestTransfer.test_corrupt_upload_keeps_active) ... ok
+test_event_overflow (test_aacpkg.TestTransfer.test_event_overflow) ... ok
+test_events_and_time (test_aacpkg.TestTransfer.test_events_and_time) ... ok
+test_packet_loss (test_aacpkg.TestTransfer.test_packet_loss) ... ok
+test_upload_rollback (test_aacpkg.TestTransfer.test_upload_rollback) ... ok
+test_flow (test_relay_e2e.E2E.test_flow) ... ok
 
 ----------------------------------------------------------------------
-Ran 9 tests in 1.749s
+Ran 11 tests in 4.698s
+
+OK
+
+== 음원 생성 서버 시험 (02: python -m unittest) ==
+test_1_library (test_server.ServerTest.test_1_library) ... ok
+test_2_auth (test_server.ServerTest.test_2_auth) ... ok
+test_3_slots (test_server.ServerTest.test_3_slots) ... ok
+test_4_recording (test_server.ServerTest.test_4_recording) ... ok
+test_5_schedule (test_server.ServerTest.test_5_schedule) ... ok
+test_6_publish_download (test_server.ServerTest.test_6_publish_download) ... ok
+test_7_events (test_server.ServerTest.test_7_events) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 4.853s
 
 OK
 
 == 크로스 컴파일 크기 (Cortex-M4F, -Os) ==
-text 2987 / data 0 / bss 3548 bytes
+text 4019 / data 2 / bss 3438 bytes

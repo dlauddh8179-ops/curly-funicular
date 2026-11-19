@@ -4,6 +4,8 @@
  *   - 외장 플래시: SPI NOR (devicetree: aac_flash 파티션)
  *   - 오디오: I2S → 외장 DAC/앰프(예: MAX98357A), 16kHz/16bit 모노
  *   - 메타데이터: NVS(settings) 사용
+ *   - 진동 모터: GPIO(vib_motor), RTC: 내부 RTC2 기반 카운터 + TIME_SET 기준값
+ *   - aac_player_tick(): 100ms 주기 k_work 로 호출(불빛 5초 소등, 세트 전환)
  */
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/flash.h>
@@ -29,6 +31,11 @@ static K_THREAD_STACK_DEFINE(audio_stack, 1024);
 static struct k_thread audio_thread;
 static K_SEM_DEFINE(audio_go, 0, 1);
 static volatile bool audio_on;
+static const struct gpio_dt_spec vib = GPIO_DT_SPEC_GET(DT_NODELABEL(vib_motor), gpios);
+static uint32_t rtc_base_unix; static int64_t rtc_base_ms;
+static struct k_work_delayable vib_off_work, tick_work;
+static void vib_off(struct k_work *w) { ARG_UNUSED(w); gpio_pin_set_dt(&vib, 0); }
+static void tick_fn(struct k_work *w) { ARG_UNUSED(w); aac_player_tick(); k_work_reschedule(&tick_work, K_MSEC(100)); }
 
 int aac_hal_flash_read(uint32_t a, void *b, size_t n) { return flash_area_read(fa, a, b, n); }
 int aac_hal_flash_write(uint32_t a, const void *b, size_t n) { return flash_area_write(fa, a, b, n); }
@@ -37,6 +44,9 @@ int aac_hal_meta_read(void *b, size_t n) { return nvs_read(&nvs, 1, b, n) == (ss
 int aac_hal_meta_write(const void *b, size_t n) { return nvs_write(&nvs, 1, b, n) >= 0 ? 0 : -1; }
 void aac_hal_amp_enable(int on) { gpio_pin_set_dt(&amp_en, on); }
 uint32_t aac_hal_time_us(void) { return (uint32_t)k_cyc_to_us_floor64(k_cycle_get_64()); }
+void aac_hal_vibrate(uint16_t ms) { gpio_pin_set_dt(&vib, 1); k_work_reschedule(&vib_off_work, K_MSEC(ms)); }
+uint32_t aac_hal_rtc_get(void) { return rtc_base_unix + (uint32_t)((k_uptime_get() - rtc_base_ms) / 1000); }
+void aac_hal_rtc_set(uint32_t t) { rtc_base_unix = t; rtc_base_ms = k_uptime_get(); }
 
 /* 오디오 스레드: 버퍼를 채워 I2S 로 계속 공급, 재생이 끝나면 drain */
 static void audio_fn(void *a, void *b, void *c)
@@ -70,7 +80,7 @@ int aac_hal_audio_start(uint32_t sr)
 }
 void aac_hal_audio_stop(void) { audio_on = false; }
 
-/* 아래 3개는 발주기관 펌웨어의 LED·이벤트·통신 모듈에 연결 */
+/* 아래 3개는 발주기관 펌웨어의 버튼 불빛·이벤트·통신 모듈에 연결 */
 __weak void aac_hal_led_set(uint8_t z, uint8_t r, uint8_t g, uint8_t b) { ARG_UNUSED(z); ARG_UNUSED(r); ARG_UNUSED(g); ARG_UNUSED(b); }
 __weak void aac_hal_event(aac_evt_t e, uint16_t v) { ARG_UNUSED(e); ARG_UNUSED(v); }
 __weak void aac_hal_tx(const uint8_t *d, size_t n) { ARG_UNUSED(d); ARG_UNUSED(n); }
@@ -79,6 +89,10 @@ int aac_hal_zephyr_init(void)
 {
     if (flash_area_open(AAC_PART, &fa) != 0) return -1;
     gpio_pin_configure_dt(&amp_en, GPIO_OUTPUT_INACTIVE);
+    gpio_pin_configure_dt(&vib, GPIO_OUTPUT_INACTIVE);
+    k_work_init_delayable(&vib_off_work, vib_off);
+    k_work_init_delayable(&tick_work, tick_fn);
+    k_work_reschedule(&tick_work, K_MSEC(100));
     nvs.flash_device = FIXED_PARTITION_DEVICE(storage_partition);
     nvs.offset = FIXED_PARTITION_OFFSET(storage_partition);
     nvs.sector_size = 4096; nvs.sector_count = 2;

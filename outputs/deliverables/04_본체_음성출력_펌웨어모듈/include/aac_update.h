@@ -11,10 +11,10 @@
 #define AAC_SLOT_A_ADDR 0x000000u
 #endif
 #ifndef AAC_SLOT_B_ADDR
-#define AAC_SLOT_B_ADDR 0x100000u
+#define AAC_SLOT_B_ADDR 0x080000u
 #endif
 #ifndef AAC_SLOT_SIZE
-#define AAC_SLOT_SIZE   0x100000u     /* 1MB × 2 (외장 플래시 2MB 이상) */
+#define AAC_SLOT_SIZE   0x080000u     /* 512KB × 2 (외장 플래시 1MB 이상): 녹음 6초 × 8개도 수용 */
 #endif
 
 int      aac_update_init(void);                 /* 메타데이터 읽고 활성 슬롯 적재 */

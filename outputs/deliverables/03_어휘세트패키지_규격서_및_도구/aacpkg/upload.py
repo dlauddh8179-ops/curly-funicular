@@ -1,19 +1,26 @@
-"""본체 업로드 프로토콜 v1 (USB CDC 시리얼 / BLE GATT 공통 프레임).
+"""기기 전송 프로토콜 v2 (BLE GATT / USB CDC 공통 프레임).
+서버에서 받은 패키지를 보호자 앱 또는 거치대가 기기로 전달하고, 기기의 누름 기록을 회수한다.
 
 프레임: 0xA5 | type(1) | seq(2) | len(2) | payload(len) | crc16-ccitt(2)  (crc 범위: type~payload)
-  0x01 BEGIN   payload = total_size u32, set_version u32, payload_crc u32
+  0x01 BEGIN   payload = total_size u32, config_version u32, payload_crc u32
   0x02 DATA    payload = offset u32 + data(<=240)
   0x03 END     payload = 없음 → 본체가 CRC 검증 후 활성 슬롯 전환
   0x05 QUERY   payload = 없음 → 0x06 VERSION 응답
   0x04 ACK     payload = seq u16, status u8          (본체 → PC)
   0x06 VERSION payload = active u32, previous u32    (본체 → PC)
   0x07 ROLLBACK payload = 없음 → 이전 슬롯으로 복귀
+  0x08 EVENTS_GET payload = max u8 → 0x09 EVENTS 응답
+  0x09 EVENTS  payload = count u8, dropped u16, 레코드(12B: unix u32, vocab_id u16, set u8, button u8, config u32) × count
+  0x0A EVENTS_ACK payload = count u8 → 기기가 가장 오래된 count 개 삭제 후 ACK
+  0x0B TIME_SET payload = unix u32, tz_offset_min i16 → 작업장 시간표 판단용 시각
 status: 0 OK, 1 FRAME_CRC, 2 TOO_LARGE, 3 SEQ, 4 VERIFY_FAIL, 5 STATE
 """
 import struct, time
 
 SOF = 0xA5
 T_BEGIN, T_DATA, T_END, T_ACK, T_QUERY, T_VERSION, T_ROLLBACK = 1, 2, 3, 4, 5, 6, 7
+T_EVENTS_GET, T_EVENTS, T_EVENTS_ACK, T_TIME_SET = 8, 9, 10, 11
+EVENT = struct.Struct("<IHBBI")
 ST_OK, ST_FRAME_CRC, ST_TOO_LARGE, ST_SEQ, ST_VERIFY_FAIL, ST_STATE = range(6)
 CHUNK = 240
 STATUS_TEXT = {0: "OK", 1: "프레임 CRC 오류", 2: "용량 초과", 3: "순서 오류", 4: "패키지 검증 실패", 5: "상태 오류"}
@@ -79,6 +86,9 @@ class Uploader:
                     if not ok: continue
                     if rtype == expect == T_VERSION:
                         return struct.unpack("<II", rp)
+                    if rtype == expect == T_EVENTS:
+                        cnt, dropped = struct.unpack_from("<BH", rp)
+                        return [EVENT.unpack_from(rp, 3 + i * EVENT.size) for i in range(cnt)], dropped
                     if rtype == T_ACK and expect == T_ACK:
                         aseq, status = struct.unpack("<HB", rp)
                         if aseq != self.seq: continue
@@ -93,8 +103,23 @@ class Uploader:
     def rollback(self):
         return self._xfer(T_ROLLBACK)
 
-    def upload(self, pkg_bytes, set_version, payload_crc, progress=None):
-        st = self._xfer(T_BEGIN, struct.pack("<III", len(pkg_bytes), set_version, payload_crc))
+    def set_time(self, unix_time=None, tz_offset_min=540):
+        return self._xfer(T_TIME_SET, struct.pack("<Ih", int(unix_time or time.time()), tz_offset_min))
+
+    def fetch_events(self, max_count=20):
+        """기기 누름 기록을 모두 회수: [(unix, vocab_id, set, button, config), ...], 유실 건수."""
+        out, dropped_total = [], 0
+        while True:
+            evs, dropped = self._xfer(T_EVENTS_GET, bytes([max_count]), expect=T_EVENTS)
+            dropped_total = max(dropped_total, dropped)
+            if not evs:
+                return out, dropped_total
+            out += evs
+            st = self._xfer(T_EVENTS_ACK, bytes([len(evs)]))
+            if st != ST_OK: raise RuntimeError("EVENTS_ACK 거부")
+
+    def upload(self, pkg_bytes, config_version, payload_crc, progress=None):
+        st = self._xfer(T_BEGIN, struct.pack("<III", len(pkg_bytes), config_version, payload_crc))
         if st != ST_OK: raise RuntimeError("BEGIN 거부: " + STATUS_TEXT[st])
         for off in range(0, len(pkg_bytes), CHUNK):
             st = self._xfer(T_DATA, struct.pack("<I", off) + pkg_bytes[off:off + CHUNK])
@@ -146,9 +171,16 @@ class SimulatedDevice:
         self.reader = FrameReader()
         self.out = bytearray()
         self.n = 0
+        self.events, self.dropped, self.time, self.tz = [], 0, 0, 540
+
+    def press(self, set_id, button, vocab_id, unix_time, config=0):
+        """시험용: 버튼 누름 기록 추가(기기 링버퍼 128건, 넘치면 오래된 것부터 삭제)."""
+        self.events.append((unix_time, vocab_id, set_id, button, config))
+        if len(self.events) > 128:
+            self.events.pop(0); self.dropped += 1
 
     def _ver(self, slot):
-        return 0 if slot is None or self.slots[slot] is None else self._parse(self.slots[slot]).set_version
+        return 0 if slot is None or self.slots[slot] is None else self._parse(self.slots[slot]).config_version
 
     def write(self, data):
         for ftype, seq, p, ok in self.reader.feed(data):
@@ -181,6 +213,16 @@ class SimulatedDevice:
                     except self._err:
                         st = ST_VERIFY_FAIL                       # 활성 슬롯 유지
                     self.staging = None
+            elif ftype == T_EVENTS_GET:
+                k = min(p[0] if p else 20, 20, len(self.events))
+                body = struct.pack("<BH", k, self.dropped) + b"".join(EVENT.pack(*e) for e in self.events[:k])
+                self.out += make_frame(T_EVENTS, seq, body); continue
+            elif ftype == T_EVENTS_ACK:
+                k = p[0] if p else 0
+                if k > len(self.events): st = ST_STATE
+                else: del self.events[:k]
+            elif ftype == T_TIME_SET:
+                self.time, self.tz = struct.unpack("<Ih", p)
             elif ftype == T_ROLLBACK:
                 other = None if self.active is None else 1 - self.active
                 if other is None or self.slots[other] is None: st = ST_STATE
